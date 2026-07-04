@@ -25,7 +25,7 @@ fun SettingsScreen(
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text("Modo de respuesta por defecto", fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            listOf("CHAT" to "Chat", "AUDIO" to "Audio", "VIDEO" to "Video").forEach { (value, label) ->
+            listOf("chat" to "Chat", "audio" to "Audio", "video" to "Video").forEach { (value, label) ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     RadioButton(selected = state.defaultMode == value, onClick = { viewModel.setDefaultMode(value) })
                     Text(label)
@@ -63,6 +63,11 @@ fun SettingsScreen(
             Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth(), enabled = !state.isLoading) {
                 if (state.isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
                 else Text("Guardar configuración")
+            }
+
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = viewModel::uploadLogs, modifier = Modifier.fillMaxWidth()) {
+                Text("Enviar logs de depuración")
             }
         }
     }

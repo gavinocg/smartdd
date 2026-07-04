@@ -2,6 +2,7 @@ package com.smartdd.app.presentation.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.smartdd.app.data.local.DebugLog
 import com.smartdd.app.data.remote.api.SmartDDApi
 import com.smartdd.app.data.remote.model.UpdateConfigRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -12,7 +13,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SettingsUiState(
-    val defaultMode: String = "CHAT", val chatEnabled: Boolean = true,
+    val defaultMode: String = "chat", val chatEnabled: Boolean = true,
     val audioEnabled: Boolean = true, val videoEnabled: Boolean = true,
     val timeoutSeconds: Int = 60, val isLoading: Boolean = false,
     val error: String? = null, val saved: Boolean = false
@@ -35,8 +36,10 @@ class SettingsViewModel @Inject constructor(private val api: SmartDDApi) : ViewM
                         audioEnabled = c.audioEnabled, videoEnabled = c.videoEnabled,
                         timeoutSeconds = c.timeoutSeconds ?: 60
                     )
+                } else {
+                    _state.value = _state.value.copy(isLoading = false, error = "Error al cargar configuración")
                 }
-            } catch (e: Exception) { _state.value = _state.value.copy(error = e.message) }
+            } catch (e: Exception) { _state.value = _state.value.copy(isLoading = false, error = e.message) }
         }
     }
 
@@ -72,6 +75,18 @@ class SettingsViewModel @Inject constructor(private val api: SmartDDApi) : ViewM
                 if (r.isSuccessful) _state.value = _state.value.copy(isLoading = false, saved = true)
                 else _state.value = _state.value.copy(isLoading = false, error = "Error al guardar")
             } catch (e: Exception) { _state.value = _state.value.copy(isLoading = false, error = e.message) }
+        }
+    }
+
+    fun uploadLogs() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            val ok = DebugLog.uploadToServer()
+            _state.value = _state.value.copy(
+                isLoading = false,
+                saved = ok,
+                error = if (!ok) "Error al enviar logs" else null
+            )
         }
     }
 }

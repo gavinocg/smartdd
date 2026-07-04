@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "project_id": "smartdd-xxxxx",
-    "storage_bucket": "smartdd-xxxxx.appspot.com"
+    "project_number": "328967180932",
+    "project_id": "smartdd-app",
+    "storage_bucket": "smartdd-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:xxxxxxxxxxxxxxxx",
+        "mobilesdk_app_id": "1:328967180932:android:7b757105ad5d76e825a8d1",
         "android_client_info": {
           "package_name": "com.smartdd.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+          "current_key": "AIzaSyBzOyaZBXvDAckDl78sEn36RJiQDaWehYc"
         }
       ],
       "services": {

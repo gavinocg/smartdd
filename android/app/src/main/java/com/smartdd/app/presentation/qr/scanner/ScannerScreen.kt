@@ -1,6 +1,8 @@
 package com.smartdd.app.presentation.qr.scanner
 
 import android.Manifest
+import android.os.Handler
+import android.os.Looper
 import android.util.Size
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -15,9 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -25,6 +27,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.smartdd.app.data.local.DebugLog
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -38,10 +41,13 @@ fun ScannerScreen(
     var qrScanned by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val analyzer = remember { QRCodeAnalyzer { uuid ->
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val analyzer = remember { QRCodeAnalyzer { rawValue ->
         if (!qrScanned) {
             qrScanned = true
-            onQrDetected(uuid)
+            val uuid = rawValue.substringAfterLast("/")
+            DebugLog.d("Scanner", "QR raw: $rawValue -> uuid: $uuid")
+            mainHandler.post { onQrDetected(uuid) }
         }
     }}
 
@@ -62,20 +68,25 @@ fun ScannerScreen(
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
-                        val previewView = PreviewView(ctx)
-                        val cameraProvider = ProcessCameraProvider.getInstance(ctx).get()
-                        val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-                        val imageAnalysis = ImageAnalysis.Builder()
-                            .setTargetResolution(Size(1280, 720))
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build().also { it.setAnalyzer(Executors.newSingleThreadExecutor(), analyzer) }
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                         try {
+                            val previewView = PreviewView(ctx)
+                            DebugLog.i("Scanner", "PreviewView created")
+                            val cameraProvider = ProcessCameraProvider.getInstance(ctx).get()
+                            DebugLog.i("Scanner", "CameraProvider obtained")
+                            val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                            val imageAnalysis = ImageAnalysis.Builder()
+                                .setTargetResolution(Size(1280, 720))
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build().also { it.setAnalyzer(Executors.newSingleThreadExecutor(), analyzer) }
+                            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                             cameraProvider.unbindAll()
                             val camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalysis)
-                            camera.cameraControl.enableTorch(torchEnabled)
-                        } catch (_: Exception) {}
-                        previewView
+                            DebugLog.i("Scanner", "Camera bound to lifecycle")
+                            previewView
+                        } catch (e: Exception) {
+                            DebugLog.e("Scanner", "Camera init failed", e)
+                            PreviewView(ctx)
+                        }
                     }
                 )
 
@@ -113,15 +124,21 @@ class QRCodeAnalyzer(private val onQrDetected: (String) -> Unit) : ImageAnalysis
 
     override fun analyze(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image ?: run { imageProxy.close(); return }
-        val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        scanner.process(inputImage).addOnSuccessListener { barcodes ->
-            for (barcode in barcodes) {
-                barcode.rawValue?.let { uuid ->
-                    onQrDetected.invoke(uuid)
-                    imageProxy.close()
-                    return@addOnSuccessListener
+        try {
+            val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            scanner.process(inputImage).addOnSuccessListener { barcodes ->
+                for (barcode in barcodes) {
+                    barcode.rawValue?.let { uuid ->
+                        DebugLog.d("QRCodeAnalyzer", "QR detected: $uuid")
+                        onQrDetected.invoke(uuid)
+                        imageProxy.close()
+                        return@addOnSuccessListener
+                    }
                 }
-            }
-        }.addOnCompleteListener { imageProxy.close() }
+            }.addOnCompleteListener { imageProxy.close() }
+        } catch (e: Exception) {
+            DebugLog.e("QRCodeAnalyzer", "Analysis error", e)
+            imageProxy.close()
+        }
     }
 }

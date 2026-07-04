@@ -54,7 +54,7 @@ qrRouter.post("/", authMiddleware, async (req: AuthRequest, res) => {
     });
 
     // Generar imagen QR
-    const qrUrl = `${req.protocol}://${req.get("host")}/api/v1/qr/${qr.uuid}`;
+    const qrUrl = `${req.protocol}://192.168.100.101:8000/api/v1/qr/${qr.uuid}`;
     const qrImage = await QRCode.toDataURL(qrUrl, {
       width: 400,
       margin: 2,

@@ -13,9 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -43,9 +43,12 @@ fun ARDoorbellScreen(
     var isRinging by remember { mutableStateOf(false) }
     val callState by callViewModel.state.collectAsState()
 
-    LaunchedEffect(callState.sessionCreated) {
+    LaunchedEffect(callState.sessionCreated, callState.error) {
         if (callState.sessionCreated) {
             onRingSent(callState.sessionId, callState.roomId)
+        }
+        if (callState.error.isNotEmpty()) {
+            isRinging = false
         }
     }
 
@@ -113,7 +116,23 @@ fun ARDoorbellScreen(
                     Text("🔔  Tocar timbre", style = MaterialTheme.typography.titleMedium)
                 }
             } else {
-                LinearProgressIndicator(modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp).fillMaxWidth(0.7f))
+                Column(Modifier.align(Alignment.BottomCenter).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.7f))
+                    if (callState.error.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(
+                                callState.error,
+                                modifier = Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
             }
         }
     }

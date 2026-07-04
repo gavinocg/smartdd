@@ -32,6 +32,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${DB_USER:-smartdd}:${DB_PASSWORD:-smartdd_pass}@127.0.0.1:5433/${DB_NAME:-smartdd}
       REDIS_URL: redis://default:${REDIS_PASSWORD:-redis_pass}@127.0.0.1:6380
+      GOOGLE_APPLICATION_CREDENTIALS: /app/serviceAccountKey.json
+    volumes:
+      - ../backend/src:/app/src
+      - ../backend/prisma:/app/prisma
+      - ../backend/serviceAccountKey.json:/app/serviceAccountKey.json:ro
 
   jitsi-web:
     network_mode: host

@@ -4,7 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import { createServer } from "http";
-import { WebSocketServer } from "./services/websocket";
+import { getWebSocketServer } from "./services/websocket";
 import { prisma } from "./services/prisma";
 import { redis } from "./services/redis";
 import { authRouter } from "./routes/auth";
@@ -14,6 +14,7 @@ import { configRouter } from "./routes/config";
 import { planRouter } from "./routes/plan";
 import { adminRouter } from "./routes/admin";
 import { deviceRouter } from "./routes/device";
+import { debugRouter } from "./routes/debug";
 import { authMiddleware } from "./middleware/auth";
 
 const app = express();
@@ -34,6 +35,7 @@ app.get("/api/v1/health", (_req, res) => {
 // ─── Rutas públicas ────────────────────────────────
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/qr", qrRouter);
+app.use("/api/v1/debug", debugRouter);
 
 // ─── Rutas protegidas ──────────────────────────────
 app.use("/api/v1/ring", authMiddleware, ringRouter);
@@ -63,7 +65,7 @@ async function bootstrap() {
     console.log("[Redis] Conexión establecida");
 
     // Inicializar WebSocket
-    const wss = new WebSocketServer(httpServer);
+    const wss = getWebSocketServer(httpServer);
     wss.initialize();
     console.log("[WS] WebSocket server inicializado");
 
