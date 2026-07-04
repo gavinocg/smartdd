@@ -1,0 +1,90 @@
+# Override para desarrollo local
+# Host networking (kernel bug impide bridge en este Ubuntu 26.04)
+services:
+  postgres:
+    network_mode: host
+    ports: []
+    command: postgres -p 5433
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-smartdd} -p 5433"]
+
+  redis:
+    network_mode: host
+    ports: []
+    command: redis-server --port 6380 --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_pass}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
+
+  nginx:
+    network_mode: host
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./admin-dev:/usr/share/nginx/html/admin:ro
+    ports: []
+
+  signaling:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      network: host
+    network_mode: host
+    ports: []
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-smartdd}:${DB_PASSWORD:-smartdd_pass}@127.0.0.1:5433/${DB_NAME:-smartdd}
+      REDIS_URL: redis://default:${REDIS_PASSWORD:-redis_pass}@127.0.0.1:6380
+
+  jitsi-web:
+    network_mode: host
+    ports: []
+    volumes:
+      - ./jitsi-web/site.conf:/defaults/default:ro
+    environment:
+      HTTP_PORT: 8081
+      DISABLE_HTTPS: "1"
+      PUBLIC_URL: http://192.168.100.101:82
+      XMPP_DOMAIN: 192.168.100.101
+      ENABLE_AUTH: 0
+      ENABLE_GUESTS: 1
+      JICOFO_AUTH_PASSWORD: ${JICOFO_AUTH_PASSWORD:-jicofo_secret}
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+      JVB_TCP_HARVESTER_DISABLED: "true"
+      JVB_TCP_PORT: -1
+      JVB_STUN_SERVERS: stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+
+  jitsi-prosody:
+    network_mode: host
+    ports: []
+    environment:
+      XMPP_DOMAIN: 192.168.100.101
+      JICOFO_AUTH_PASSWORD: ${JICOFO_AUTH_PASSWORD:-jicofo_secret}
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+
+  jitsi-jicofo:
+    network_mode: host
+    ports: []
+    environment:
+      XMPP_DOMAIN: 192.168.100.101
+      XMPP_AUTH_DOMAIN: auth.192.168.100.101
+      JICOFO_AUTH_PASSWORD: ${JICOFO_AUTH_PASSWORD:-jicofo_secret}
+
+  jitsi-jvb:
+    image: jitsi/jvb:stable-11031
+    network_mode: host
+    ports: []
+    environment:
+      XMPP_DOMAIN: 192.168.100.101
+      XMPP_AUTH_DOMAIN: auth.192.168.100.101
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+      JVB_STUN_SERVERS: stun.l.google.com:19302,stun1.l.google.com:19302
+      JVB_TCP_HARVESTER_DISABLED: "true"
+      JVB_TCP_PORT: -1
+    volumes:
+      - jitsi-config:/config
+
+  admin-panel:
+    profiles:
+      - never
+
+  cloudflared:
+    profiles:
+      - never

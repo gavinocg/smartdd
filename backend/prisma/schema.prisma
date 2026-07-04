@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+  B2P
+}
+
+enum SessionStatus {
+  PENDING
+  PREVIEW
+  ACTIVE
+  COMPLETED
+  REJECTED
+  TIMEOUT
+}
+
+enum ResponseMode {
+  CHAT
+  AUDIO
+  VIDEO
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  plan          Plan     @default(FREE)
+  role          String   @default("user") // "user" | "admin" | "business"
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  qrCodes       QrCode[]
+  sessions      RingSession[]  @relation("ReceptorSessions")
+  devices       Device[]
+  config        UserConfig?
+  adminLogs     AdminLog[]
+
+  @@index([email])
+  @@index([plan])
+  @@index([role])
+}
+
+model QrCode {
+  id            String   @id @default(uuid())
+  uuid          String   @unique
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  lat           Float
+  lng           Float
+  radiusMeters  Int      @default(50)
+  active        Boolean  @default(true)
+  metadata      Json?    // Para futuro B2P: { tableNumber, businessId, etc }
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions      RingSession[]
+
+  @@index([uuid])
+  @@index([userId])
+  @@index([active])
+}
+
+model RingSession {
+  id              String        @id @default(uuid())
+  uuid            String        @unique // roomId para Jitsi
+  qrId            String
+  qr              QrCode        @relation(fields: [qrId], references: [id])
+  emisorId        String
+  emisorName      String?
+  receptorId      String
+  receptor        User          @relation("ReceptorSessions", fields: [receptorId], references: [id])
+  status          SessionStatus @default(PENDING)
+  responseMode    ResponseMode?
+  previewStartedAt DateTime?
+  respondedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([uuid])
+  @@index([qrId])
+  @@index([receptorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  token       String   // FCM token
+  platform    String   @default("android")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+}
+
+model UserConfig {
+  id              String       @id @default(uuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id])
+  defaultMode     ResponseMode @default(CHAT)
+  chatEnabled     Boolean      @default(true)
+  audioEnabled    Boolean      @default(true)
+  videoEnabled    Boolean      @default(true)
+  timeoutSeconds  Int          @default(60)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model AdminLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String   // "change_plan" | "suspend_user" | "delete_user" | "config_update"
+  targetId  String?  // userId afectado (si aplica)
+  details   Json?    // Información adicional
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+}

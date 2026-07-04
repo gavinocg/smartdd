@@ -1,0 +1,26 @@
+Proyecto: Smart Ding Dong (SMARTDD)
+Tipo: Aplicación Android APK para instalar en celulares de gama baja, media y alta
+
+Objetivo general:
+
+Abrir un vínculo virtual seguro de comunicación de texto/audio/video entre un usuario receptor y varios emisores utilizando la tecnología de realidad aumentada simulada sobre un código QR a razón de un toque de timbre virtual.
+
+Objetivos específicos:
+
+
+
+Flujo:
+-------------
+
+1. Receptor genera e imprime qr el cual se vincula a su cuenta smartdd (vinculo para comunicación texto/voz/video)
+2. Emisor/es escanea/n código qr que mediante la realidad aumentada se mira como un timbre virtual 3D (botón para presionar)
+3. Si Emisor/es presiona/n el botón del timbre virtual llega una solicitud de texto/audio/video al Receptor conforme lo tenga configurado el Receptor
+4. El Receptor puede responder/rechazar la comunicación según le convenga
+
+RF1. El usuario receptor genera un código QR que vincula la latitud/longitud de geolocalización único de la aplicación que la puede imprimir y colocar en un lugar visible de su puerta de residencia/trabajo.
+- En version gratuita puede generar hasta 1 código qr vinculada a una geolocalización y 1 dispositivo.
+- En version pro se genera la cantidad de códigos qr que requiera el usuario vinculados a x dispositivos simultáneos.
+
+RF2. Los usuarios emisores pueden escanear los qr de smartdd dentro del rango de geolocalización, lo que significa que efectivamente se encuentran en el lugar, timbrando un timbre virtual para comunicarse
+
+RF3. La idea de negocio a futuro es poder vender este sistema para los patios de comida o cualquier servicio para que reemplacen los buzzer análogos, se venderá el api y la infraestructura para generar qr y permita la comunicación directa b2p.

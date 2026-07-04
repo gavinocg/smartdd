@@ -1,0 +1,197 @@
+volumes:
+  pgdata:
+  jitsi-config:
+  jitsi-recordings:
+  redis-data:
+
+services:
+  # ─── Base de datos ─────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartdd-postgres
+    restart: unless-stopped
+    
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${DB_USER:-smartdd}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-smartdd_pass}
+      POSTGRES_DB: ${DB_NAME:-smartdd}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-smartdd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Cache / Pub-Sub ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: smartdd-redis
+    restart: unless-stopped
+    
+
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_pass}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ─── Signaling Server (API REST + WebSocket) ──────────
+  signaling:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: smartdd-signaling
+    restart: unless-stopped
+    
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-smartdd}:${DB_PASSWORD:-smartdd_pass}@postgres:5432/${DB_NAME:-smartdd}
+      REDIS_URL: redis://default:${REDIS_PASSWORD:-redis_pass}@redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      JITSI_DOMAIN: ${JITSI_DOMAIN:-jitsi.smartdd.com}
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      DEFAULT_RADIUS_METERS: ${DEFAULT_RADIUS_METERS:-50}
+      DEFAULT_TIMEOUT_SECONDS: ${DEFAULT_TIMEOUT_SECONDS:-60}
+    expose:
+      - "3000"
+    volumes:
+      - ../backend/src:/app/src
+      - ../backend/prisma:/app/prisma
+
+  # ─── Admin Panel (React) ──────────────────────────────
+  admin-panel:
+    image: nginx:alpine
+    container_name: smartdd-admin
+    restart: unless-stopped
+    
+
+    volumes:
+      - ../admin-panel/dist:/usr/share/nginx/html:ro
+      - ./nginx/admin.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    depends_on:
+      - signaling
+
+  # ─── Proxy Reverso (nginx) ───────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: smartdd-nginx
+    restart: unless-stopped
+    
+
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+  # ─── Jitsi Meet ──────────────────────────────────────
+  jitsi-web:
+    image: jitsi/web:stable-11031
+    container_name: smartdd-jitsi-web
+    restart: unless-stopped
+    
+
+    volumes:
+      - jitsi-config:/config
+      - jitsi-recordings:/recordings
+    environment:
+      ENABLE_AUTH: 0
+      ENABLE_GUESTS: 1
+      XMPP_DOMAIN: ${JITSI_DOMAIN:-jitsi.smartdd.com}
+      PUBLIC_URL: https://${JITSI_DOMAIN:-jitsi.smartdd.com}
+      JICOFO_AUTH_PASSWORD: ${JICOFO_AUTH_PASSWORD:-jicofo_secret}
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+      JVB_TCP_HARVESTER_DISABLED: "true"
+      JVB_TCP_PORT: -1
+      JVB_STUN_SERVERS: stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+    expose:
+      - "80"
+    depends_on:
+      - jitsi-prosody
+      - jitsi-jicofo
+
+  jitsi-prosody:
+    image: jitsi/prosody:stable-11031
+    container_name: smartdd-jitsi-prosody
+    restart: unless-stopped
+    
+
+    volumes:
+      - jitsi-config:/config
+    environment:
+      XMPP_DOMAIN: ${JITSI_DOMAIN:-jitsi.smartdd.com}
+      JICOFO_AUTH_PASSWORD: ${JICOFO_AUTH_PASSWORD:-jicofo_secret}
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+    expose:
+      - "5222"
+      - "5347"
+
+  jitsi-jicofo:
+    image: jitsi/jicofo:stable-11031
+    container_name: smartdd-jitsi-jicofo
+    restart: unless-stopped
+    
+
+    volumes:
+      - jitsi-config:/config
+    environment:
+      XMPP_DOMAIN: ${JITSI_DOMAIN:-jitsi.smartdd.com}
+      XMPP_AUTH_DOMAIN: auth.${JITSI_DOMAIN:-jitsi.smartdd.com}
+      JICOFO_AUTH_PASSWORD: ${JICOFO_AUTH_PASSWORD:-jicofo_secret}
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+    depends_on:
+      - jitsi-prosody
+
+  jitsi-jvb:
+    image: jitsi/jvb:stable-11031
+    container_name: smartdd-jitsi-jvb
+    restart: unless-stopped
+    
+
+    ports:
+      - "10000:10000/udp"
+    volumes:
+      - jitsi-config:/config
+    environment:
+      XMPP_DOMAIN: ${JITSI_DOMAIN:-jitsi.smartdd.com}
+      XMPP_AUTH_DOMAIN: auth.${JITSI_DOMAIN:-jitsi.smartdd.com}
+      JVB_AUTH_PASSWORD: ${JVB_AUTH_PASSWORD:-jvb_secret}
+      JVB_STUN_SERVERS: stun.l.google.com:19302,stun1.l.google.com:19302
+      JVB_TCP_HARVESTER_DISABLED: "true"
+      JVB_TCP_PORT: -1
+    depends_on:
+      - jitsi-prosody
+
+  # ─── Cloudflare Tunnel ────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: smartdd-cloudflared
+    restart: unless-stopped
+    
+
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
+    depends_on:
+      - nginx

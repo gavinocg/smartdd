@@ -1,0 +1,35 @@
+# Cloudflare Tunnel Configuration - SMARTDD
+# Tunnel creado con: cloudflared tunnel create smartdd
+
+tunnel: smartdd
+credentials-file: /etc/cloudflared/credentials.json
+
+# Opciones de logging
+loglevel: info
+transport-loglevel: warn
+
+# Configuración de ingreso
+ingress:
+  # API REST + WebSocket
+  - hostname: api.smartdd.com
+    service: http://nginx:80
+    originRequest:
+      connectTimeout: 10s
+      noTLSVerify: false
+
+  # Panel de administración web
+  - hostname: admin.smartdd.com
+    service: http://nginx:80
+    originRequest:
+      connectTimeout: 10s
+      noTLSVerify: false
+
+  # Jitsi Meet web interface
+  - hostname: jitsi.smartdd.com
+    service: http://nginx:80
+    originRequest:
+      connectTimeout: 10s
+      noTLSVerify: false
+
+  # Ruta por defecto (404)
+  - service: http_status:404

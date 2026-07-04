@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Base del timbre (rectángulo) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,40 L74,40 Q76,40 76,42 L76,78 Q76,80 74,80 L34,80 Q32,80 32,78 L32,42 Q32,40 34,40 Z" />
+    <!-- Botón circular -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M54,52 m-10,0 a10,10 0,1 1,20 0 a10,10 0,1 1,-20 0" />
+    <!-- Anillo LED -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M54,52 m-7,0 a7,7 0,1 1,14 0 a7,7 0,1 1,-14 0" />
+    <!-- Centro del botón -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,52 m-3,0 a3,3 0,1 1,6 0 a3,3 0,1 1,-6 0" />
+</vector>
