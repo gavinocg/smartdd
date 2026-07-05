@@ -5,6 +5,8 @@ import { prisma } from "../services/prisma";
 import { redis } from "../services/redis";
 import { AuthRequest, adminMiddleware } from "../middleware/auth";
 import { adminMonitor } from "../services/adminMonitor";
+import { getWebSocketServer } from "../services/websocket";
+import { RingLogger } from "../services/ringLogger";
 
 export const adminRouter = Router();
 
@@ -548,6 +550,130 @@ adminRouter.put("/config/general", async (req: AuthRequest, res) => {
     }
     console.error("[Admin] Error al guardar config:", err);
     res.status(500).json({ error: "Error al guardar configuración" });
+  }
+});
+
+// ─── Receptor Simulator (debug/testing) ────────────────
+
+// GET /api/v1/admin/test/pending-sessions — Sesiones PENDING activas
+adminRouter.get("/test/pending-sessions", async (_req: AuthRequest, res) => {
+  try {
+    const sessions = await prisma.ringSession.findMany({
+      where: { status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        qr: { select: { uuid: true } },
+      },
+    });
+    res.json({ sessions });
+  } catch (err) {
+    console.error("[Admin] Error al listar sesiones pendientes:", err);
+    res.status(500).json({ error: "Error al listar sesiones" });
+  }
+});
+
+// POST /api/v1/admin/test/accept-ring — Admin acepta sesión como receptor simulado
+const acceptRingSchema = z.object({
+  sessionId: z.string().uuid(),
+  mode: z.enum(["chat", "audio", "video"]).default("video"),
+});
+
+adminRouter.post("/test/accept-ring", async (req: AuthRequest, res) => {
+  try {
+    const { sessionId, mode } = acceptRingSchema.parse(req.body);
+
+    const session = await prisma.ringSession.findUnique({
+      where: { id: sessionId },
+      include: { qr: true },
+    });
+
+    if (!session) {
+      res.status(404).json({ error: "Sesión no encontrada" });
+      return;
+    }
+
+    if (session.status !== "PENDING") {
+      res.status(409).json({ error: `La sesión ya fue ${session.status.toLowerCase()}` });
+      return;
+    }
+
+    // Actualizar sesión como ACTIVE
+    await prisma.ringSession.update({
+      where: { id: sessionId },
+      data: {
+        status: "ACTIVE",
+        responseMode: mode.toUpperCase() as any,
+        respondedAt: new Date(),
+      },
+    });
+
+    const wss = getWebSocketServer();
+
+    // Notificar al Emisor vía WebSocket
+    wss.sendToUser(session.emisorId, {
+      type: "ring_answered",
+      sessionId: session.id,
+      action: "accept",
+      mode,
+    });
+
+    RingLogger.receptorResponded(session.id, "accept", mode);
+    RingLogger.emisorNotified(session.id, session.emisorId, "accept");
+
+    adminMonitor.broadcast({
+      type: "ring_answered", severity: "success", source: "admin_test",
+      message: `Admin (simulando receptor) ACEPTÓ sesión ${session.id.slice(0, 8)} — modo: ${mode}`,
+      details: { sessionId, adminId: req.userId!, mode },
+    });
+
+    res.json({
+      success: true,
+      session: { id: session.id, status: "ACTIVE", mode },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Datos inválidos", details: err.errors });
+      return;
+    }
+    console.error("[Admin] Error al aceptar sesión:", err);
+    res.status(500).json({ error: "Error al aceptar sesión" });
+  }
+});
+
+// POST /api/v1/admin/test/reject-ring — Admin rechaza sesión
+adminRouter.post("/test/reject-ring", async (req: AuthRequest, res) => {
+  try {
+    const { sessionId } = z.object({ sessionId: z.string().uuid() }).parse(req.body);
+
+    const session = await prisma.ringSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.status !== "PENDING") {
+      res.status(404).json({ error: "Sesión no encontrada o ya respondida" });
+      return;
+    }
+
+    await prisma.ringSession.update({
+      where: { id: sessionId },
+      data: { status: "REJECTED", respondedAt: new Date() },
+    });
+
+    const wss = getWebSocketServer();
+    wss.sendToUser(session.emisorId, { type: "ring_rejected", sessionId });
+
+    adminMonitor.broadcast({
+      type: "ring_rejected", severity: "info", source: "admin_test",
+      message: `Admin (simulando receptor) RECHAZÓ sesión ${session.id.slice(0, 8)}`,
+      details: { sessionId, adminId: req.userId! },
+    });
+
+    res.json({ success: true, status: "REJECTED" });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Datos inválidos" });
+      return;
+    }
+    console.error("[Admin] Error al rechazar sesión:", err);
+    res.status(500).json({ error: "Error al rechazar sesión" });
   }
 });
 

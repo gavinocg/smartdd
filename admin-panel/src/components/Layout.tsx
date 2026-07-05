@@ -17,6 +17,7 @@ export default function Layout() {
         <NavItem to="/logs">Actividad</NavItem>
         <NavItem to="/config">Configuración</NavItem>
         <NavItem to="/ring-debug">Ring Debug</NavItem>
+        <NavItem to="/receptor-sim">Simular Receptor</NavItem>
         <div style={{ marginTop: "auto", padding: "1rem" }}>
           <div style={{ fontSize: "0.85rem", color: "#a0aec0", marginBottom: "0.5rem" }}>{user?.email}</div>
           <button onClick={logout} style={{ width: "100%", padding: "0.5rem", background: "none", border: "1px solid #e2e8f0", borderRadius: "6px", cursor: "pointer", color: "#718096", fontSize: "0.85rem" }}>Cerrar sesión</button>

@@ -8,6 +8,7 @@ import Logs from "./pages/Logs";
 import Console from "./pages/Console";
 import Config from "./pages/Config";
 import RingDebug from "./pages/RingDebug";
+import ReceptorSimulator from "./pages/ReceptorSimulator";
 import Layout from "./components/Layout";
 import type { ReactNode } from "react";
 
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="console" element={<Console />} />
             <Route path="config" element={<Config />} />
             <Route path="ring-debug" element={<RingDebug />} />
+            <Route path="receptor-sim" element={<ReceptorSimulator />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
