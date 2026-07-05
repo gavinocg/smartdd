@@ -4,6 +4,8 @@ import { verify } from "jsonwebtoken";
 import { prisma } from "./prisma";
 import { redis } from "./redis";
 import { notifyUser } from "./fcm";
+import { adminMonitor } from "./adminMonitor";
+import { RingLogger } from "./ringLogger";
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -28,6 +30,7 @@ export class WebSocketServer {
 
   initialize() {
     this.wss = new WSServer({ server: this.httpServer, path: "/ws" });
+    this.initAdminMonitor();
 
     this.wss.on("connection", (socket: AuthenticatedSocket, req) => {
       console.log("[WS] Nueva conexión desde:", req.socket.remoteAddress);
@@ -92,6 +95,37 @@ export class WebSocketServer {
     });
 
     console.log("[WS] WebSocket server inicializado en /ws");
+  }
+
+  private initAdminMonitor() {
+    const adminWss = new WSServer({ server: this.httpServer, path: "/ws/admin/monitor" });
+    adminWss.on("connection", (ws: WebSocket, req) => {
+      console.log("[AdminMonitor] Nueva conexión desde:", req.socket.remoteAddress);
+      let authenticated = false;
+      ws.on("message", (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === "auth") {
+            const decoded = verify(msg.token, process.env.JWT_SECRET || "secret") as { userId: string; role: string };
+            if (decoded.role !== "admin") {
+              ws.send(JSON.stringify({ type: "error", message: "Se requiere rol admin" }));
+              ws.close();
+              return;
+            }
+            authenticated = true;
+            adminMonitor.addClient(ws);
+            ws.send(JSON.stringify({ type: "authenticated", userId: decoded.userId }));
+            console.log("[AdminMonitor] Admin autenticado:", decoded.userId);
+          } else if (!authenticated) {
+            ws.send(JSON.stringify({ type: "error", message: "Autentícate primero con { type: 'auth', token }" }));
+          }
+        } catch {
+          ws.send(JSON.stringify({ type: "error", message: "Mensaje inválido" }));
+        }
+      });
+      ws.on("error", () => {});
+    });
+    console.log("[AdminMonitor] Monitor WebSocket inicializado en /ws/admin/monitor");
   }
 
   private async handleAuth(socket: AuthenticatedSocket, message: WSMessage) {
@@ -159,6 +193,13 @@ export class WebSocketServer {
         receptorId: qr.userId,
         status: "PENDING",
       },
+    });
+
+    RingLogger.sessionCreated(session.id, session.uuid, "Visitante");
+    adminMonitor.broadcast({
+      type: "session_created", severity: "success", source: "ws",
+      message: `Sesión ${session.id.slice(0, 8)} creada vía WebSocket`,
+      details: { sessionId: session.id, emisorId: socket.userId, receptorId: qr.userId },
     });
 
     // Notificar al Receptor
@@ -248,6 +289,11 @@ export class WebSocketServer {
       });
 
       this.send(socket, { type: "response_sent", sessionId });
+      adminMonitor.broadcast({
+        type: "ws_ring_answered", severity: "success", source: "ws",
+        message: `WebSocket: Receptor ACEPTÓ ${sessionId.slice(0, 8)} — modo: ${mode}`,
+        details: { sessionId, action: "accept", mode },
+      });
     } else {
       await prisma.ringSession.update({
         where: { id: sessionId },
@@ -260,6 +306,11 @@ export class WebSocketServer {
       });
 
       this.send(socket, { type: "response_sent", sessionId });
+      adminMonitor.broadcast({
+        type: "ws_ring_rejected", severity: "info", source: "ws",
+        message: `WebSocket: Receptor RECHAZÓ ${sessionId.slice(0, 8)}`,
+        details: { sessionId, action: "reject" },
+      });
     }
   }
 

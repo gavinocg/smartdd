@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../services/prisma";
+import { redis } from "../services/redis";
 import { AuthRequest, adminMiddleware } from "../middleware/auth";
+import { adminMonitor } from "../services/adminMonitor";
 
 export const adminRouter = Router();
 
@@ -249,4 +251,81 @@ adminRouter.get("/logs", async (req: AuthRequest, res) => {
     console.error("[Admin] Error al obtener logs:", err);
     res.status(500).json({ error: "Error al obtener logs" });
   }
+});
+
+// GET /api/v1/admin/monitor/recent — Eventos recientes del monitor
+adminRouter.get("/monitor/recent", (_req: AuthRequest, res) => {
+  res.json({ events: adminMonitor.getRecent(200), clients: adminMonitor.getClientsCount() });
+});
+
+// GET /api/v1/admin/config/general — Config global del sistema
+adminRouter.get("/config/general", async (_req: AuthRequest, res) => {
+  try {
+    const keys = ["defaultTimeoutSeconds", "defaultRadiusMeters", "maintenanceMode", "maxQrPerUser"];
+    const values: Record<string, string | null> = {};
+    for (const key of keys) {
+      values[key] = await redis.get(`admin:config:${key}`);
+    }
+    res.json({
+      defaultTimeoutSeconds: parseInt(values.defaultTimeoutSeconds || "60"),
+      defaultRadiusMeters: parseInt(values.defaultRadiusMeters || "50"),
+      maintenanceMode: values.maintenanceMode === "true",
+      maxQrPerUser: parseInt(values.maxQrPerUser || "10"),
+    });
+  } catch {
+    // Fallback si Redis no está disponible
+    res.json({
+      defaultTimeoutSeconds: 60,
+      defaultRadiusMeters: 50,
+      maintenanceMode: false,
+      maxQrPerUser: 10,
+    });
+  }
+});
+
+// PUT /api/v1/admin/config/general — Guardar config global
+const configSchema = z.object({
+  defaultTimeoutSeconds: z.number().min(10).max(300).optional(),
+  defaultRadiusMeters: z.number().min(10).max(1000).optional(),
+  maintenanceMode: z.boolean().optional(),
+  maxQrPerUser: z.number().min(1).max(100).optional(),
+});
+
+adminRouter.put("/config/general", async (req: AuthRequest, res) => {
+  try {
+    const data = configSchema.parse(req.body);
+    const pipeline = redis.multi();
+    for (const [key, value] of Object.entries(data)) {
+      pipeline.set(`admin:config:${key}`, String(value));
+    }
+    await pipeline.exec();
+
+    adminMonitor.broadcast({
+      type: "config_updated", severity: "info", source: "admin",
+      message: `Configuración actualizada por admin`,
+      details: { changes: data, adminId: req.userId! },
+    });
+
+    res.json({ success: true, message: "Configuración guardada" });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Datos inválidos", details: err.errors });
+      return;
+    }
+    console.error("[Admin] Error al guardar config:", err);
+    res.status(500).json({ error: "Error al guardar configuración" });
+  }
+});
+
+// POST /api/v1/admin/monitor/test — Enviar evento de prueba (para debug)
+adminRouter.post("/monitor/test", (req: AuthRequest, res) => {
+  const { severity, message } = req.body as { severity?: string; message?: string };
+  adminMonitor.broadcast({
+    type: "test_event",
+    severity: (severity as any) || "info",
+    source: "admin",
+    message: message || "Evento de prueba desde el panel",
+    details: { adminId: req.userId! },
+  });
+  res.json({ success: true });
 });

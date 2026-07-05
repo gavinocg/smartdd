@@ -5,6 +5,9 @@ import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
 import UserDetail from "./pages/UserDetail";
 import Logs from "./pages/Logs";
+import Console from "./pages/Console";
+import Config from "./pages/Config";
+import RingDebug from "./pages/RingDebug";
 import Layout from "./components/Layout";
 import type { ReactNode } from "react";
 
@@ -34,6 +37,9 @@ export default function App() {
             <Route path="users" element={<Users />} />
             <Route path="users/:id" element={<UserDetail />} />
             <Route path="logs" element={<Logs />} />
+            <Route path="console" element={<Console />} />
+            <Route path="config" element={<Config />} />
+            <Route path="ring-debug" element={<RingDebug />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

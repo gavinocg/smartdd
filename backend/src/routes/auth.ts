@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../services/prisma";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { adminMonitor } from "../services/adminMonitor";
 
 export const authRouter = Router();
 
@@ -84,6 +85,11 @@ authRouter.post("/register", async (req, res) => {
     });
 
     res.status(201).json({ user, token, refreshToken });
+    adminMonitor.broadcast({
+      type: "user_registered", severity: "success", source: "auth",
+      message: `Nuevo usuario registrado: ${user.name} (${user.email})`,
+      details: { userId: user.id, name: user.name, email: user.email },
+    });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: "Datos inválidos", details: err.errors });
@@ -137,6 +143,11 @@ authRouter.post("/login", async (req, res) => {
       },
       token,
       refreshToken,
+    });
+    adminMonitor.broadcast({
+      type: "user_login", severity: "info", source: "auth",
+      message: `Inicio de sesión: ${user.name} (${user.email})`,
+      details: { userId: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

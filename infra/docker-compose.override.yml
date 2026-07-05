@@ -19,7 +19,7 @@ services:
     network_mode: host
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
-      - ./admin-dev:/usr/share/nginx/html/admin:ro
+      - ../admin-panel/dist:/usr/share/nginx/html/admin:ro
     ports: []
 
   signaling:

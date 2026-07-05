@@ -4,6 +4,7 @@ import { prisma } from "../services/prisma";
 import { getWebSocketServer } from "../services/websocket";
 import { AuthRequest } from "../middleware/auth";
 import { RingLogger } from "../services/ringLogger";
+import { adminMonitor } from "../services/adminMonitor";
 
 export const ringRouter = Router();
 
@@ -43,6 +44,11 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
 
     if (existingSession) {
       RingLogger.existingSession(existingSession.id, existingSession.status, req.userId!);
+      adminMonitor.broadcast({
+        type: "existing_session", severity: "warning", source: "ring",
+        message: `Intento duplicado — sesión ${existingSession.id.slice(0, 8)} ya activa (${existingSession.status})`,
+        details: { existingSessionId: existingSession.id, status: existingSession.status, emisorId: req.userId! },
+      });
       res.status(409).json({
         error: "Ya hay una sesión activa para este QR",
         session: { id: existingSession.id, roomId: existingSession.uuid, status: existingSession.status },
@@ -50,7 +56,12 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
       return;
     }
 
-    RingLogger.ringInitiated(data.qrId, req.userId!, qr.user.id);
+      RingLogger.ringInitiated(data.qrId, req.userId!, qr.user.id);
+      adminMonitor.broadcast({
+        type: "ring_initiated", severity: "info", source: "ring",
+        message: `Timbre presionado para QR ${data.qrId.slice(0, 8)}...`,
+        details: { qrId: data.qrId, emisorId: req.userId!, receptorId: qr.user.id },
+      });
 
     // Crear sesión
     const session = await prisma.ringSession.create({
@@ -65,6 +76,11 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
     });
 
     RingLogger.sessionCreated(session.id, session.uuid, session.emisorName);
+    adminMonitor.broadcast({
+      type: "session_created", severity: "success", source: "ring",
+      message: `Sesión ${session.id.slice(0, 8)} creada — ${session.emisorName} → dueño del QR`,
+      details: { sessionId: session.id, roomId: session.uuid, emisorName: session.emisorName },
+    });
 
     // Notificar al Receptor vía WebSocket
     const wss = getWebSocketServer();
@@ -85,6 +101,11 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
       roomId: session.uuid,
     });
     RingLogger.pushSent(session.id, qr.user.id, devicesSent);
+    adminMonitor.broadcast({
+      type: "receptor_notified", severity: "info", source: "ring",
+      message: `Receptor notificado — WS:${receptorWsConnected ? "conectado" : "desconectado"}, push:${devicesSent} dispositivos`,
+      details: { sessionId: session.id, receptorId: qr.user.id, wsConnected: receptorWsConnected, pushDevices: devicesSent },
+    });
 
     // Timeout automático
     const timeoutMs = (qr.user.config?.timeoutSeconds || 60) * 1000;
@@ -96,6 +117,11 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
           data: { status: "TIMEOUT" },
         });
         RingLogger.sessionTimedOut(session.id);
+        adminMonitor.broadcast({
+          type: "session_timeout", severity: "warning", source: "ring",
+          message: `Sesión ${session.id.slice(0, 8)} expiró por timeout`,
+          details: { sessionId: session.id },
+        });
         wss.sendToUser(session.emisorId, { type: "ring_timeout", sessionId: session.id });
         wss.sendToUser(session.receptorId, { type: "ring_timeout", sessionId: session.id });
       }
@@ -179,6 +205,11 @@ ringRouter.post("/respond", async (req: AuthRequest, res) => {
 
       RingLogger.receptorResponded(session.id, "accept", data.mode);
       RingLogger.emisorNotified(session.id, session.emisorId, "accept");
+      adminMonitor.broadcast({
+        type: "ring_answered", severity: "success", source: "ring",
+        message: `Receptor ACEPTÓ sesión ${session.id.slice(0, 8)} — modo: ${data.mode}`,
+        details: { sessionId: session.id, action: "accept", mode: data.mode },
+      });
 
       wss.sendToUser(session.emisorId, {
         type: "ring_answered",
@@ -203,6 +234,11 @@ ringRouter.post("/respond", async (req: AuthRequest, res) => {
 
       RingLogger.receptorResponded(session.id, "reject", null);
       RingLogger.emisorNotified(session.id, session.emisorId, "reject");
+      adminMonitor.broadcast({
+        type: "ring_rejected", severity: "info", source: "ring",
+        message: `Receptor RECHAZÓ sesión ${session.id.slice(0, 8)}`,
+        details: { sessionId: session.id, action: "reject" },
+      });
 
       wss.sendToUser(session.emisorId, {
         type: "ring_rejected",

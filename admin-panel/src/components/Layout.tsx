@@ -12,8 +12,11 @@ export default function Layout() {
           <div style={{ background: "#48bb78", color: "white", padding: "4px 12px", borderRadius: "20px", fontSize: "0.8rem", display: "inline-block", fontWeight: 600 }}>SMARTDD</div>
         </div>
         <NavItem to="/">Dashboard</NavItem>
+        <NavItem to="/console">Consola</NavItem>
         <NavItem to="/users">Usuarios</NavItem>
         <NavItem to="/logs">Actividad</NavItem>
+        <NavItem to="/config">Configuración</NavItem>
+        <NavItem to="/ring-debug">Ring Debug</NavItem>
         <div style={{ marginTop: "auto", padding: "1rem" }}>
           <div style={{ fontSize: "0.85rem", color: "#a0aec0", marginBottom: "0.5rem" }}>{user?.email}</div>
           <button onClick={logout} style={{ width: "100%", padding: "0.5rem", background: "none", border: "1px solid #e2e8f0", borderRadius: "6px", cursor: "pointer", color: "#718096", fontSize: "0.85rem" }}>Cerrar sesión</button>
