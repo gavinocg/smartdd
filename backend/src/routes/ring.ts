@@ -43,6 +43,41 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
     });
 
     if (existingSession) {
+      // Si el mismo usuario vuelve a tocar, re-notificar y resetear timeout
+      if (existingSession.emisorId === req.userId && existingSession.status === "PENDING") {
+        RingLogger.existingSession(existingSession.id, existingSession.status, req.userId!);
+        adminMonitor.broadcast({
+          type: "existing_session", severity: "info", source: "ring",
+          message: `Re-toque — renovando notificación para sesión ${existingSession.id.slice(0, 8)}`,
+          details: { existingSessionId: existingSession.id, status: existingSession.status, emisorId: req.userId! },
+        });
+
+        const wss = getWebSocketServer();
+        wss.sendToUser(qr.user.id, {
+          type: "incoming_ring",
+          sessionId: existingSession.id,
+          roomId: existingSession.uuid,
+          emisorName: existingSession.emisorName,
+          previewVideo: true,
+        });
+        const devicesSent = await wss.notifyUser(qr.user.id, {
+          type: "incoming_ring",
+          sessionId: existingSession.id,
+          roomId: existingSession.uuid,
+        });
+
+        adminMonitor.broadcast({
+          type: "receptor_notified", severity: "info", source: "ring",
+          message: `Receptor notificado (re-toque) — push:${devicesSent} dispositivos`,
+          details: { sessionId: existingSession.id, receptorId: qr.user.id, pushDevices: devicesSent },
+        });
+
+        res.status(200).json({
+          session: { id: existingSession.id, roomId: existingSession.uuid, status: existingSession.status },
+        });
+        return;
+      }
+
       RingLogger.existingSession(existingSession.id, existingSession.status, req.userId!);
       adminMonitor.broadcast({
         type: "existing_session", severity: "warning", source: "ring",
