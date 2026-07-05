@@ -42,7 +42,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Limpiar el intent después de leerlo para evitar navegación duplicada
         intent?.removeExtra("navigate")
         intent?.removeExtra("sessionId")
         intent?.removeExtra("roomId")

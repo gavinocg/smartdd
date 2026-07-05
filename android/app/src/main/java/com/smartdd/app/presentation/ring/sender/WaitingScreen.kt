@@ -10,12 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import com.smartdd.app.BuildConfig
 import com.smartdd.app.data.remote.websocket.WebSocketClient
-import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
-import org.jitsi.meet.sdk.JitsiMeetView
-import java.net.URL
 
 @Composable
 fun WaitingScreen(
@@ -55,35 +50,8 @@ fun WaitingScreen(
             Text("Llamando...", fontWeight = FontWeight.Bold, fontSize = 24.sp)
             Spacer(Modifier.height(8.dp))
             Text("Esperando respuesta", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-            Spacer(Modifier.height(16.dp))
-
-            Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        JitsiMeetView(ctx).apply {
-                            val options = JitsiMeetConferenceOptions.Builder()
-                                .setRoom(roomId)
-                                .setServerURL(URL("https://${BuildConfig.JITSI_DOMAIN}"))
-                                .setAudioMuted(true)
-                                .setVideoMuted(false)
-                                .setFeatureFlag("chat.enabled", false)
-                                .setFeatureFlag("invite.enabled", false)
-                                .setFeatureFlag("kickout.enabled", false)
-                                .setFeatureFlag("prejoinpage.enabled", false)
-                                .setFeatureFlag("welcomepage.enabled", false)
-                                .build()
-                            join(options)
-                        }
-                    },
-                    onRelease = { it.dispose() }
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(32.dp))
             CircularProgressIndicator()
-
             Spacer(Modifier.height(48.dp))
             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth(0.6f)) {
                 Icon(Icons.Default.Cancel, null); Spacer(Modifier.width(8.dp))
