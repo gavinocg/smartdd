@@ -161,6 +161,11 @@ fun SmartDDNavGraph(notificationPayload: NotificationPayload? = null) {
                 roomId = roomId,
                 webSocketClient = webSocketClient,
                 onCancel = { navController.popBackStack(Routes.HOME, false) },
+                onNavigateToChat = { sId ->
+                    navController.navigate(Routes.chat(sId)) {
+                        popUpTo(Routes.HOME) { inclusive = false }
+                    }
+                },
                 onNavigateToAudioCall = { rId, sId ->
                     navController.navigate(Routes.audioCall(rId, sId)) {
                         popUpTo(Routes.HOME) { inclusive = false }

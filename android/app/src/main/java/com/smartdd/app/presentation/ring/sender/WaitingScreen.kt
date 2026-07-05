@@ -18,6 +18,7 @@ fun WaitingScreen(
     roomId: String,
     webSocketClient: WebSocketClient,
     onCancel: () -> Unit,
+    onNavigateToChat: (String) -> Unit,
     onNavigateToAudioCall: (String, String) -> Unit,
     onNavigateToVideoCall: (String, String) -> Unit
 ) {
@@ -25,12 +26,12 @@ fun WaitingScreen(
 
     LaunchedEffect(roomId) {
         webSocketClient.events.collect { msg ->
-            if (msg.type == "respond" && msg.sessionId == sessionId) {
-                val action = msg.action ?: "video"
-                if (action == "audio") {
-                    onNavigateToAudioCall(roomId, sessionId)
-                } else {
-                    onNavigateToVideoCall(roomId, sessionId)
+            if ((msg.type == "ring_answered" || msg.type == "respond") && msg.sessionId == sessionId) {
+                val mode = msg.mode ?: "video"
+                when (mode) {
+                    "chat" -> onNavigateToChat(sessionId)
+                    "audio" -> onNavigateToAudioCall(roomId, sessionId)
+                    else -> onNavigateToVideoCall(roomId, sessionId)
                 }
                 receiverResponded = true
             }
