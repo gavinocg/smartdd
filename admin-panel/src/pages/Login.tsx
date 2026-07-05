@@ -48,7 +48,8 @@ export default function Login() {
           {busy ? "Ingresando..." : "Ingresar"}
         </button>
         <div style={{ textAlign: "center", marginTop: "0.5rem" }}>
-          <a href="http://192.168.100.101:81/smartdd.apk" style={{ color: "#48bb78", fontSize: "0.85rem", textDecoration: "none" }}>
+          <a href="http://192.168.100.101:81/smartdd.apk" target="_blank" rel="noopener noreferrer"
+            style={{ color: "#48bb78", fontSize: "0.85rem", textDecoration: "none", cursor: "pointer" }}>
             📱 Descargar última versión APK
           </a>
         </div>
