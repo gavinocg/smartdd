@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../services/prisma";
@@ -9,6 +10,239 @@ export const adminRouter = Router();
 
 // Todas las rutas de admin requieren rol admin
 adminRouter.use(adminMiddleware);
+
+// POST /api/v1/admin/users — Crear usuario (admin)
+const createUserSchema = z.object({
+  name: z.string().min(2).max(100),
+  email: z.string().email(),
+  password: z.string().min(6).max(100),
+  plan: z.enum(["FREE", "PRO", "B2P"]).optional().default("FREE"),
+  role: z.enum(["user", "admin", "business"]).optional().default("user"),
+});
+
+adminRouter.post("/users", async (req: AuthRequest, res) => {
+  try {
+    const data = createUserSchema.parse(req.body);
+
+    const existing = await prisma.user.findUnique({ where: { email: data.email } });
+    if (existing) {
+      res.status(409).json({ error: "El email ya está registrado" });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        passwordHash,
+        plan: data.plan,
+        role: data.role,
+        config: {
+          create: {
+            defaultMode: "CHAT",
+            chatEnabled: true,
+            audioEnabled: true,
+            videoEnabled: true,
+          },
+        },
+      },
+      select: {
+        id: true, name: true, email: true, plan: true, role: true, active: true, createdAt: true,
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: req.userId!,
+        action: "create_user",
+        targetId: user.id,
+        details: { name: data.name, email: data.email, plan: data.plan, role: data.role },
+      },
+    });
+
+    adminMonitor.broadcast({
+      type: "user_created", severity: "success", source: "admin",
+      message: `Admin creó usuario: ${user.name} (${user.email})`,
+      details: { adminId: req.userId!, targetId: user.id },
+    });
+
+    res.status(201).json({ user });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Datos inválidos", details: err.errors });
+      return;
+    }
+    console.error("[Admin] Error al crear usuario:", err);
+    res.status(500).json({ error: "Error al crear usuario" });
+  }
+});
+
+// PUT /api/v1/admin/users/:id — Actualizar usuario
+const updateUserSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  email: z.string().email().optional(),
+  plan: z.enum(["FREE", "PRO", "B2P"]).optional(),
+  role: z.enum(["user", "admin", "business"]).optional(),
+  active: z.boolean().optional(),
+});
+
+adminRouter.put("/users/:id", async (req: AuthRequest, res) => {
+  try {
+    const targetId = req.params.id as string;
+
+    if (targetId === req.userId && req.body.role !== undefined) {
+      res.status(403).json({ error: "No puedes cambiar tu propio rol" });
+      return;
+    }
+
+    const data = updateUserSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+
+    if (data.email && data.email !== user.email) {
+      const existing = await prisma.user.findUnique({ where: { email: data.email } });
+      if (existing) {
+        res.status(409).json({ error: "El email ya está en uso" });
+        return;
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: targetId },
+      data,
+      select: {
+        id: true, name: true, email: true, plan: true, role: true, active: true, createdAt: true,
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: req.userId!,
+        action: "update_user",
+        targetId,
+        details: { changes: data },
+      },
+    });
+
+    adminMonitor.broadcast({
+      type: "user_updated", severity: "info", source: "admin",
+      message: `Admin actualizó usuario: ${updated.name}`,
+      details: { adminId: req.userId!, targetId, changes: data },
+    });
+
+    res.json({ user: updated });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Datos inválidos", details: err.errors });
+      return;
+    }
+    console.error("[Admin] Error al actualizar usuario:", err);
+    res.status(500).json({ error: "Error al actualizar usuario" });
+  }
+});
+
+// PUT /api/v1/admin/users/:id/password — Resetear contraseña
+const resetPasswordSchema = z.object({
+  password: z.string().min(6).max(100),
+});
+
+adminRouter.put("/users/:id/password", async (req: AuthRequest, res) => {
+  try {
+    const targetId = req.params.id as string;
+    const { password } = resetPasswordSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+
+    const bcrypt = await import("bcryptjs");
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await prisma.user.update({
+      where: { id: targetId },
+      data: { passwordHash },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: req.userId!,
+        action: "reset_password",
+        targetId,
+      },
+    });
+
+    adminMonitor.broadcast({
+      type: "password_reset", severity: "info", source: "admin",
+      message: `Admin reseteó contraseña de ${user.name}`,
+      details: { adminId: req.userId!, targetId },
+    });
+
+    res.json({ success: true, message: "Contraseña actualizada" });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Contraseña inválida", details: err.errors });
+      return;
+    }
+    console.error("[Admin] Error al resetear contraseña:", err);
+    res.status(500).json({ error: "Error al resetear contraseña" });
+  }
+});
+
+// DELETE /api/v1/admin/users/:id — Eliminar usuario
+adminRouter.delete("/users/:id", async (req: AuthRequest, res) => {
+  try {
+    const targetId = req.params.id as string;
+
+    if (targetId === req.userId) {
+      res.status(403).json({ error: "No puedes eliminarte a ti mismo" });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+
+    // Eliminar en cascada: config, devices, qrCodes, sessions, adminLogs
+    await prisma.$transaction([
+      prisma.userConfig.deleteMany({ where: { userId: targetId } }),
+      prisma.device.deleteMany({ where: { userId: targetId } }),
+      prisma.adminLog.deleteMany({ where: { targetId } }),
+      prisma.ringSession.deleteMany({ where: { receptorId: targetId } }),
+      prisma.qrCode.deleteMany({ where: { userId: targetId } }),
+      prisma.user.delete({ where: { id: targetId } }),
+    ]);
+
+    await prisma.adminLog.create({
+      data: {
+        adminId: req.userId!,
+        action: "delete_user",
+        targetId,
+        details: { name: user.name, email: user.email },
+      },
+    });
+
+    adminMonitor.broadcast({
+      type: "user_deleted", severity: "warning", source: "admin",
+      message: `Admin eliminó usuario: ${user.name} (${user.email})`,
+      details: { adminId: req.userId!, targetId },
+    });
+
+    res.json({ success: true, message: "Usuario eliminado permanentemente" });
+  } catch (err) {
+    console.error("[Admin] Error al eliminar usuario:", err);
+    res.status(500).json({ error: "Error al eliminar usuario" });
+  }
+});
 
 // GET /api/v1/admin/users
 adminRouter.get("/users", async (req: AuthRequest, res) => {
