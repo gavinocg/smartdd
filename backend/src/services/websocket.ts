@@ -323,18 +323,23 @@ export class WebSocketServer {
     }
   }
 
+  isUserConnected(userId: string): boolean {
+    const sockets = this.connections.get(userId);
+    return sockets !== undefined && sockets.size > 0;
+  }
+
   // Enviar notificación push si no está conectado
-  async notifyUser(userId: string, message: object) {
+  async notifyUser(userId: string, message: object): Promise<number> {
     // Verificar si tiene WebSocket activo
     if (this.connections.has(userId)) {
       this.sendToUser(userId, message);
-      return;
+      return 0;
     }
 
     // Enviar FCM push notification
     const msg = message as Record<string, string>;
     if (msg.type === "incoming_ring") {
-      await notifyUser(
+      return await notifyUser(
         userId,
         "🔔 Alguien toca el timbre",
         msg.emisorName || "Alguien está en la puerta",
@@ -346,6 +351,7 @@ export class WebSocketServer {
         }
       );
     }
+    return 0;
   }
 }
 

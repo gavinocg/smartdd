@@ -1,5 +1,6 @@
 import { Router } from "express";
 import fs from "fs";
+import { RingLogger } from "../services/ringLogger";
 
 export const debugRouter = Router();
 
@@ -28,5 +29,15 @@ debugRouter.get("/log", (_req, res) => {
 
 debugRouter.delete("/log", (_req, res) => {
   try { fs.unlinkSync(LOG_FILE); } catch {}
+  res.json({ ok: true });
+});
+
+// Ring handshake debug
+debugRouter.get("/ring", (_req, res) => {
+  res.type("application/json").send(RingLogger.getLog());
+});
+
+debugRouter.delete("/ring", (_req, res) => {
+  RingLogger.clearLog();
   res.json({ ok: true });
 });
