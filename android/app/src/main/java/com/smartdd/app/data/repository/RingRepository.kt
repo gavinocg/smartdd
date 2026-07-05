@@ -1,5 +1,6 @@
 package com.smartdd.app.data.repository
 
+import com.google.gson.Gson
 import com.smartdd.app.data.local.DebugLog
 import com.smartdd.app.data.remote.api.SmartDDApi
 import com.smartdd.app.data.remote.model.*
@@ -9,10 +10,28 @@ import javax.inject.Singleton
 
 @Singleton
 class RingRepository @Inject constructor(private val api: SmartDDApi) {
+    private val gson = Gson()
+
     suspend fun ring(qrId: String, emisorName: String? = null): Result<RingResponse> = try {
         val r = api.ring(RingRequest(qrId, emisorName))
-        if (r.isSuccessful && r.body() != null) Result.Success(r.body()!!)
-        else {
+        if (r.isSuccessful && r.body() != null) {
+            Result.Success(r.body()!!)
+        } else if (r.code() == 409) {
+            // Sesión activa existente — extraer session del error body
+            val errorBody = r.errorBody()?.string()
+            val parsed = gson.fromJson(errorBody, Map::class.java)
+            val sessionMap = parsed?.get("session") as? Map<*, *>
+            if (sessionMap != null) {
+                val existing = RingSessionDTO(
+                    id = sessionMap["id"] as? String ?: "",
+                    roomId = sessionMap["roomId"] as? String ?: "",
+                    status = sessionMap["status"] as? String ?: "PENDING"
+                )
+                Result.Success(RingResponse(existing))
+            } else {
+                Result.Error("Ya hay una sesión activa para este QR", 409)
+            }
+        } else {
             val errorBody = r.errorBody()?.string() ?: "Error al enviar timbre"
             DebugLog.e("Ring", "Error HTTP ${r.code()}: $errorBody")
             Result.Error(errorBody, r.code())

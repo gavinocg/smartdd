@@ -40,7 +40,10 @@ ringRouter.post("/", async (req: AuthRequest, res) => {
     });
 
     if (existingSession) {
-      res.status(409).json({ error: "Ya hay una sesión activa para este QR" });
+      res.status(409).json({
+        error: "Ya hay una sesión activa para este QR",
+        session: { id: existingSession.id, roomId: existingSession.uuid, status: existingSession.status },
+      });
       return;
     }
 
